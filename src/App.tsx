@@ -1,10 +1,3 @@
-import React, { useState, useEffect } from 'react';
-import { io, Socket } from 'socket.io-client';
-import Table from './components/Table';
-import Sidebar from './components/Sidebar';
-import SnakeGame from './components/SnakeGame';
-import type { Player, CardModel, GamePhaseValue } from './logic/types';
-import './App.css';
 
 // Connect to the backend
 const socketUrl = import.meta.env.VITE_SERVER_URL ||
@@ -117,11 +110,25 @@ function App() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Check file size for GIFs (limit to 2MB to prevent connection drops)
+      if (file.type === 'image/gif' && file.size > 2 * 1024 * 1024) {
+        alert("GIF is too large! Please choose a GIF under 2MB.");
+        return;
+      }
+
       const reader = new FileReader();
       reader.onloadend = () => {
+        const result = reader.result as string;
+
+        // If it's a GIF, don't use canvas (which would make it static)
+        if (file.type === 'image/gif') {
+          setAvatarUrl(result);
+          return;
+        }
+
         const img = new Image();
         img.onload = () => {
-          // Downscale to 200x200 for networking efficiency
+          // Downscale static images for networking efficiency
           const canvas = document.createElement('canvas');
           const MAX_SIZE = 200;
           let width = img.width;
@@ -147,7 +154,7 @@ function App() {
           const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
           setAvatarUrl(dataUrl);
         };
-        img.src = reader.result as string;
+        img.src = result;
       };
       reader.readAsDataURL(file);
     }

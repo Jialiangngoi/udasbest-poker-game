@@ -1,21 +1,3 @@
-import express from 'express';
-import http from 'http';
-import { Server, Socket } from 'socket.io';
-import cors from 'cors';
-import { GameEngine } from './logic/gameEngine.js';
-import { SnakeEngine } from './logic/snakeEngine.js';
-
-const app = express();
-app.use(cors());
-
-const server = http.createServer(app);
-const io = new Server(server, {
-    cors: {
-        origin: '*',
-        methods: ['GET', 'POST']
-    },
-    maxHttpBufferSize: 1e7 // 10MB limit for profile pictures Base64
-});
 
 const PORT = process.env.PORT || 3001;
 
