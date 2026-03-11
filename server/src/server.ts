@@ -103,23 +103,17 @@ io.on('connection', (socket) => {
 
     socket.on('poker_action', (data) => {
         const { roomId, action, payload } = data;
-        console.log(`Poker Action: ${action} from ${socket.id} in room ${roomId}`);
         const room = rooms.get(roomId);
-        if (!room || room.gameType !== 'poker' || !room.pokerEngine) {
-            console.log(`Room ${roomId} not found or not poker! Rooms available:`, Array.from(rooms.keys()));
-            return;
-        }
+        if (!room || room.gameType !== 'poker' || !room.pokerEngine) return;
 
         const engine = room.pokerEngine;
 
         switch (action) {
             case 'sit_down':
-                console.log(`Sitting down at index ${payload.index} for ${payload.name} (ID: ${payload.ownerId})`);
-                engine.sitDown(payload.index, payload.name, payload.avatarUrl, payload.ownerId || socket.id);
+                engine.sitDown(payload.index, payload.name, payload.avatarUrl, payload.ownerId);
                 break;
             case 'stand_up':
-                console.log(`Standing up from index ${payload.index} (ID: ${payload.ownerId})`);
-                engine.standUp(payload.index, payload.ownerId || socket.id);
+                engine.standUp(payload.index, payload.ownerId);
                 break;
             case 'refresh_player':
                 engine.refreshPlayer(payload.index);
@@ -136,7 +130,8 @@ io.on('connection', (socket) => {
             case 'fold':
                 engine.fold();
                 break;
-            case 'peek':
+            case 'get_bank':
+                // Individual request for bank if needed, but we broadcast it anyway
                 break;
         }
 
@@ -161,22 +156,12 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        console.log('User disconnected:', socket.id);
-
         // Remove from rooms
         for (const [roomId, room] of rooms.entries()) {
             if (room.players.has(socket.id)) {
                 room.players.delete(socket.id);
-
-                if (room.gameType === 'poker' && room.pokerEngine) {
-                    // Stay seated for reconnecting
-                } else if (room.gameType === 'snake' && room.snakeEngine) {
-                    const s = room.snakeEngine.snakes.find(s => s.id === socket.id);
-                    if (s) s.isDead = true;
-                }
-
                 if (room.players.size === 0) {
-                    rooms.delete(roomId); // Clean up empty rooms
+                    rooms.delete(roomId);
                 } else {
                     broadcastRoomState(roomId);
                 }
@@ -228,7 +213,8 @@ function broadcastRoomState(roomId: string) {
             message: room.pokerEngine.message,
             lastRaise: room.pokerEngine.lastRaise,
             turnStartTime: room.pokerEngine.turnStartTime,
-            timeLimitMs: room.pokerEngine.timeLimitMs
+            timeLimitMs: room.pokerEngine.timeLimitMs,
+            bank: room.pokerEngine.exportBank()
         });
     }
 }

@@ -36,7 +36,6 @@ function App() {
       id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36);
       localStorage.setItem('poop_poker_device_id', id);
     }
-    console.log("Local Device ID:", id);
     return id;
   });
   const [isConnected, setIsConnected] = useState<boolean>(false);
@@ -59,6 +58,7 @@ function App() {
     lastRaise: number;
     turnStartTime: number;
     timeLimitMs: number;
+    bank: Record<string, number>;
   }>({
     players: [],
     communityCards: [],
@@ -68,7 +68,8 @@ function App() {
     message: 'Waiting for server state...',
     lastRaise: 0,
     turnStartTime: 0,
-    timeLimitMs: 15000
+    timeLimitMs: 15000,
+    bank: {}
   });
 
   // Local UI State
@@ -95,10 +96,15 @@ function App() {
       setGameState(state);
       setIsRaising(false);
 
-      // Update bank balance from current player if seated
-      const seatedPlayer = state.players.find((p: Player) => p.ownerId === persistentDeviceId);
-      if (seatedPlayer) {
-        setBankBalance(seatedPlayer.chips);
+      // Update personal bank balance from the broadcasted global bank
+      if (state.bank && state.bank[persistentDeviceId] !== undefined) {
+        setBankBalance(state.bank[persistentDeviceId]);
+      } else {
+        // Fallback: check if seated
+        const seatedPlayer = state.players.find((p: Player) => p.ownerId === persistentDeviceId);
+        if (seatedPlayer) {
+          setBankBalance(seatedPlayer.chips);
+        }
       }
     };
 
@@ -133,10 +139,6 @@ function App() {
         }
         const img = new Image();
         img.onload = () => {
-          if (isGif && file.size > MAX_GIF_SIZE) {
-            const confirmStatic = window.confirm(`This GIF is quite large (${(file.size / 1024 / 1024).toFixed(1)}MB). Use a static version instead?`);
-            if (!confirmStatic) return;
-          }
           const canvas = document.createElement('canvas');
           const MAX_DIM = 200;
           let width = img.width;
@@ -257,7 +259,7 @@ function App() {
         <div className="table-container">
           <Table players={gameState.players} communityCards={gameState.communityCards} pot={gameState.pot} currentPlayerIndex={gameState.currentPlayerIndex} isPeeking={isPeeking} phase={gameState.phase} turnStartTime={gameState.turnStartTime} timeLimitMs={gameState.timeLimitMs} onSitDown={handleSitClick} onRefresh={handleRefresh} onStandUp={handleStandUp} deviceId={persistentDeviceId} />
         </div>
-        <Sidebar players={gameState.players} currentPlayerIndex={gameState.currentPlayerIndex} />
+        <Sidebar players={gameState.players} currentPlayerIndex={gameState.currentPlayerIndex} bank={gameState.bank} />
       </div>
       <div className="controls-container">
         {!hasSeatedPlayers ? <div className="onboarding-tip">Click any seat to JOIN!</div> : !iHaveSeat ? <div className="onboarding-tip">Waiting for a seat...</div> : gameState.players.filter((p: Player) => p.isSeated).length < 2 ? <div className="onboarding-tip">Waiting for players...</div> : gameState.phase === 'Showdown' ? <button className="btn btn-primary btn-large" onClick={handleNewHand}>NEXT HAND 🔄</button> : (
@@ -275,6 +277,7 @@ function App() {
                 <button className="btn btn-primary" onClick={confirmRaise} style={{ width: '100%' }}>CONFIRM 🚀</button>
               </div>
             )}
+            <button className="btn btn-secondary btn-small" onClick={handleNewHand} style={{ marginTop: 20, opacity: 0.7 }}>FORCE RESTART HAND 🛠️</button>
           </div>
         )}
       </div>

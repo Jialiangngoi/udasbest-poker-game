@@ -15,7 +15,7 @@ export class GameEngine {
     isPeeking: boolean = false;
     turnStartTime: number = 0;
     timeLimitMs: number = 15000;
-    private bank: Map<string, number> = new Map();
+    public bank: Map<string, number> = new Map();
     private deck: Deck;
 
     constructor() {
@@ -40,6 +40,7 @@ export class GameEngine {
         // Enforce one seat per ownerId if provided
         if (ownerId && this.players.some(p => p.ownerId === ownerId)) {
             console.log("Device already has a seat.");
+            this.message = "You are already seated elsewhere!";
             return;
         }
 
@@ -49,10 +50,11 @@ export class GameEngine {
         // Recover from bank or give initial chips
         if (ownerId && this.bank.has(ownerId)) {
             this.players[index].chips = this.bank.get(ownerId)!;
-            this.message = `Welcome back, ${name}! Your chips have been restored.`;
+            this.message = `Welcome back, ${name}! Your 💩 ${this.players[index].chips.toLocaleString()} chips have been restored.`;
         } else {
             this.players[index].chips = 10000000; // 10M
             if (ownerId) this.bank.set(ownerId, 10000000);
+            this.message = `${name} joined with 💩 10,000,000!`;
         }
 
         this.players[index].title = TITLES[0];
@@ -65,8 +67,6 @@ export class GameEngine {
             // Only start if we aren't already in a hand
             if (this.communityCards.length === 0 && this.players.every(p => p.hand.length === 0)) {
                 this.startNewHand();
-            } else {
-                this.message = `${name} joined! They'll play in the next hand.`;
             }
         } else {
             this.message = `Waiting for another player to join...`;
@@ -92,9 +92,12 @@ export class GameEngine {
         player.avatarUrl = undefined;
 
         // Check if game can continue
-        const seated = this.players.filter(p => p.isSeated);
-        if (seated.length < 2) {
+        const active = this.players.filter(p => p.isSeated && !p.isFolded);
+        if (active.length < 2) {
             this.message = "Waiting for more players...";
+            this.phase = GamePhase.PreFlop;
+            this.communityCards = [];
+            this.players.forEach(p => p.hand = []);
         }
     }
 
@@ -121,10 +124,10 @@ export class GameEngine {
     startNewHand() {
         const seatedCount = this.players.filter(p => p.isSeated && p.chips > 0).length;
         if (seatedCount < 2) {
-            this.message = 'Waiting for at least 2 players to join...';
-            // Clear cards if any
+            this.message = 'Need at least 2 players with 💩 to start!';
             this.communityCards = [];
             this.players.forEach(p => p.hand = []);
+            this.phase = GamePhase.PreFlop;
             return;
         }
 
@@ -149,7 +152,7 @@ export class GameEngine {
         }
 
         this.collectBlinds();
-        this.message = `New hand started. ${this.players[this.currentPlayerIndex].name}'s turn.`;
+        this.message = `New hand started! ${this.players[this.currentPlayerIndex].name}'s turn.`;
     }
 
     private collectBlinds() {
@@ -247,7 +250,7 @@ export class GameEngine {
             }
             this.currentPlayerIndex = next;
             this.resetTimer();
-            this.message = `Pass device to ${this.players[this.currentPlayerIndex].name}`;
+            this.message = `Turn: ${this.players[this.currentPlayerIndex].name}`;
         }
     }
 
@@ -300,17 +303,8 @@ export class GameEngine {
         let next = 0;
         // Find first player to act who isn't all-in
         const activePlayers = this.players.filter(p => p.isSeated && !p.isFolded);
-        const bettors = activePlayers.filter(p => p.chips > 0);
-
-        if (bettors.length === 0 && activePlayers.length >= 2) {
-            // Everyone is all-in, just go to showdown
-            this.showdown();
-            return;
-        }
-
         while (!this.players[next].isSeated || this.players[next].isFolded || (this.players[next].chips === 0 && activePlayers.length > 0)) {
             next = (next + 1) % this.players.length;
-            // Safety break
             if (next === 0 && (!this.players[0].isSeated || this.players[0].isFolded || this.players[0].chips === 0)) {
                 break;
             }
@@ -348,7 +342,6 @@ export class GameEngine {
             const share = Math.floor(this.pot / winners.length);
             for (const w of winners) {
                 w.player.chips += share;
-                // Update bank for winner
                 if (w.player.ownerId) this.bank.set(w.player.ownerId, w.player.chips);
             }
             this.pot = 0;
@@ -365,48 +358,19 @@ export class GameEngine {
 
     private endHand(winner: Player) {
         winner.chips += this.pot;
-        // Update bank for winner
         if (winner.ownerId) this.bank.set(winner.ownerId, winner.chips);
         this.pot = 0;
         this.phase = GamePhase.Showdown;
     }
 
-    getCurrentHandResult(playerIndex: number): HandResult | null {
-        const p = this.players[playerIndex];
-        if (!p.isSeated || p.isFolded || p.hand.length === 0) return null;
-        return HandEvaluator.evaluate([...p.hand, ...this.communityCards]);
-    }
-
-    exportPlayers(): Partial<Player>[] {
-        return this.players.map(p => ({
-            name: p.name,
-            chips: p.chips,
-            isSeated: p.isSeated,
-            title: p.title,
-            titleIndex: p.titleIndex,
-            avatarUrl: p.avatarUrl
-        }));
-    }
-
-    importPlayers(savedData: Partial<Player>[]) {
-        savedData.forEach((data, i) => {
-            if (i < this.players.length) {
-                this.players[i] = { ...this.players[i], ...data };
-            }
-        });
-
-        const seated = this.players.filter(p => p.isSeated);
-        if (seated.length >= 2 && this.phase === GamePhase.PreFlop && this.players.every(p => p.hand.length === 0)) {
-            this.startNewHand();
-        }
+    exportBank(): Record<string, number> {
+        const out: Record<string, number> = {};
+        this.bank.forEach((val, key) => out[key] = val);
+        return out;
     }
 
     getHandRankLabel(rank: number): string {
         const labels = ['High Card', 'Pair', 'Two Pair', 'Three of a Kind', 'Straight', 'Flush', 'Full House', 'Four of a Kind', 'Straight Flush', 'Royal Flush'];
         return labels[rank] || 'Unknown';
-    }
-
-    getBankBalance(ownerId: string): number {
-        return this.bank.get(ownerId) || 0;
     }
 }

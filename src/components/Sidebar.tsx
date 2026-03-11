@@ -4,9 +4,15 @@ import type { Player } from '../logic/types';
 interface SidebarProps {
     players: Player[];
     currentPlayerIndex: number;
+    bank: Record<string, number>;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ players, currentPlayerIndex }) => {
+const Sidebar: React.FC<SidebarProps> = ({ players, currentPlayerIndex, bank }) => {
+    // Sort bank by balance for the leaderboard
+    const bankList = Object.entries(bank)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 10);
+
     return (
         <div className="sidebar-container" style={{
             backgroundColor: '#1a1a1a',
@@ -19,11 +25,50 @@ const Sidebar: React.FC<SidebarProps> = ({ players, currentPlayerIndex }) => {
         }}>
             <h2 style={{
                 color: '#f1c40f',
-                fontSize: '20px',
-                marginBottom: '20px',
+                fontSize: '18px',
+                marginBottom: '15px',
                 textAlign: 'center',
                 borderBottom: '1px solid #333',
-                paddingBottom: '10px'
+                paddingBottom: '10px',
+                letterSpacing: 1
+            }}>
+                🏦 BANKROLLS
+            </h2>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '30px' }}>
+                {bankList.length === 0 ? (
+                    <div style={{ color: '#555', textAlign: 'center', fontSize: 12 }}>No bank records yet.</div>
+                ) : (
+                    bankList.map(([id, balance], idx) => {
+                        const seatedPlayer = players.find(p => p.ownerId === id);
+                        return (
+                            <div key={id} style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                fontSize: '13px',
+                                color: seatedPlayer ? '#f1c40f' : '#bdc3c7',
+                                background: seatedPlayer ? 'rgba(241, 196, 15, 0.1)' : 'transparent',
+                                padding: '4px 8px',
+                                borderRadius: '4px'
+                            }}>
+                                <span style={{ fontWeight: seatedPlayer ? 'bold' : 'normal' }}>
+                                    {idx + 1}. {seatedPlayer ? seatedPlayer.name : 'Unknown User'}
+                                </span>
+                                <span>💩 {balance.toLocaleString()}</span>
+                            </div>
+                        );
+                    })
+                )}
+            </div>
+
+            <h2 style={{
+                color: '#f1c40f',
+                fontSize: '18px',
+                marginBottom: '15px',
+                textAlign: 'center',
+                borderBottom: '1px solid #333',
+                paddingBottom: '10px',
+                letterSpacing: 1
             }}>
                 TABLE STATUS
             </h2>
@@ -87,13 +132,14 @@ const Sidebar: React.FC<SidebarProps> = ({ players, currentPlayerIndex }) => {
                     </div>
                 ))}
             </div>
+
             <div style={{ marginTop: 'auto', paddingTop: '20px', textAlign: 'center' }}>
                 <p style={{ fontSize: '10px', color: '#555', marginBottom: '8px', letterSpacing: '1px' }}>SECURE PAYMENTS BY</p>
-                <img
-                    src="/src/assets/partners.png"
-                    alt="Logo"
-                    style={{ width: '100%', maxWidth: '180px', opacity: 0.6, filter: 'grayscale(100%) brightness(1.5)' }}
-                />
+                <div style={{ color: '#eee', fontSize: '18px', fontWeight: 'bold', display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                    <span>VISA</span>
+                    <span>TNG</span>
+                    <span>PAYPAL</span>
+                </div>
             </div>
         </div>
     );
