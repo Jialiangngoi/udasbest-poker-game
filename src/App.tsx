@@ -7,12 +7,21 @@ import type { Player, CardModel, GamePhaseValue } from './logic/types';
 import './App.css';
 
 // Connect to the backend
-// If env var is not set, dynamically use the current hostname (useful for testing on phones over local WiFi)
 const socketUrl = import.meta.env.VITE_SERVER_URL ||
   (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && !window.location.hostname.includes('vercel.app')
     ? `http://${window.location.hostname}:3001`
-    : 'http://localhost:3001');
-const socket: Socket = io(socketUrl, { autoConnect: false });
+    : window.location.hostname.includes('vercel.app')
+      ? 'https://udasbest-poker-game.onrender.com'
+      : 'http://localhost:3001');
+
+// Singleton socket instance outside the component to avoid multiple connections
+const socket: Socket = io(socketUrl, {
+  autoConnect: false,
+  transports: ['polling', 'websocket'],
+  reconnection: true,
+  reconnectionAttempts: 10,
+  reconnectionDelay: 1000
+});
 
 function App() {
   const [mode, setMode] = useState<'lobby' | 'game'>('lobby');
@@ -21,6 +30,9 @@ function App() {
   });
   const [selectedGame, setSelectedGame] = useState<'poker' | 'snake'>('poker');
   const [roomId, setRoomId] = useState<string>('');
+  const [socketId, setSocketId] = useState<string>('');
+  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   // Player Profile
   const [playerName, setPlayerName] = useState(() => localStorage.getItem('poop_poker_name') || '');
@@ -53,14 +65,47 @@ function App() {
   const [isPeeking, setIsPeeking] = useState(false);
 
   useEffect(() => {
-    socket.connect();
+    if (!socket.connected) {
+      console.log("App connecting to socket...");
+      socket.connect();
+    }
 
-    socket.on('poker_state', (state) => {
+    const onConnect = () => {
+      console.log('Socket connected!', socket.id);
+      setIsConnected(true);
+      setSocketId(socket.id || '');
+      setConnectionError(null);
+    };
+
+    const onDisconnect = () => {
+      console.log('Socket disconnected');
+      setIsConnected(false);
+    };
+
+    const onConnectError = (err: any) => {
+      console.error('Connection Error:', err);
+      setConnectionError(err.message || 'Unknown connection error');
+    };
+
+    const onPokerState = (state: any) => {
       setGameState(state);
-    });
+    };
+
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    socket.on('connect_error', onConnectError);
+    socket.on('poker_state', onPokerState);
+
+    // If already connected when effect runs
+    if (socket.connected) {
+      onConnect();
+    }
 
     return () => {
-      socket.off('poker_state');
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+      socket.off('connect_error', onConnectError);
+      socket.off('poker_state', onPokerState);
     };
   }, []);
 
@@ -76,8 +121,8 @@ function App() {
   };
 
   const handleSelectGame = (gameType: 'poker' | 'snake') => {
-    if (!socket.connected) {
-      alert("⚠️ Cannot connect to the game server!\n\nIf you are on the Vercel URL, your browser might be blocking the connection to the local server (Mixed Content). Please return to your local frontend (http://localhost:5173) to test it, or wait until the backend is fully deployed online.");
+    if (!isConnected) {
+      alert(`⚠️ Cannot connect to the game server!\n\nStatus: ${connectionError || 'Connecting...'}\n\nPlease check your internet or refresh the page.`);
       return;
     }
 
@@ -101,7 +146,19 @@ function App() {
   };
 
   const handleSitClick = (index: number) => {
-    if (gameState.players.some(p => p.ownerId === socket.id)) return;
+    const currentId = socketId || socket.id;
+    console.log(`Sitting down at index ${index}. My ID: ${currentId}, Room: ${roomId}`);
+
+    if (!isConnected || !currentId) {
+      alert("Connection lost. Please wait or refresh.");
+      return;
+    }
+
+    if (gameState.players.some(p => p.ownerId === currentId)) {
+      alert("You are already seated at the table!");
+      return;
+    }
+
     sendPokerAction('sit_down', { index, name: playerName.trim(), avatarUrl });
   };
 
@@ -236,8 +293,8 @@ function App() {
     <div className="app-container">
       <div className="game-header" style={{ position: 'relative' }}>
         <h1>💩 POOP POKER 💩</h1>
-        <div style={{ position: 'absolute', right: 20, top: 20, fontSize: 16, color: '#2ecc71', fontWeight: 'bold' }}>
-          🟢 GLOBAL SERVER ACTIVE
+        <div style={{ position: 'absolute', right: 20, top: 20, fontSize: 16, color: isConnected ? '#2ecc71' : '#e74c3c', fontWeight: 'bold' }}>
+          {isConnected ? '🟢 GLOBAL SERVER ACTIVE' : '🔴 CONNECTING...'}
         </div>
         <div className="status-message">{gameState.message}</div>
       </div>
@@ -256,7 +313,7 @@ function App() {
             onSitDown={handleSitClick}
             onRefresh={handleRefresh}
             onStandUp={handleStandUp}
-            deviceId={socket.id || ''}
+            deviceId={socketId || socket.id || ''}
           />
         </div>
         <Sidebar players={gameState.players} currentPlayerIndex={gameState.currentPlayerIndex} />

@@ -58,6 +58,7 @@ io.on('connection', (socket) => {
 
     socket.on('join_global_room', (data, callback) => {
         const { gameType, roomId } = data;
+        console.log(`User ${socket.id} joining global room: ${roomId} for ${gameType}`);
         let room = rooms.get(roomId);
 
         // Auto-create global rooms if they are empty or don't exist yet
@@ -101,8 +102,12 @@ io.on('connection', (socket) => {
 
     socket.on('poker_action', (data) => {
         const { roomId, action, payload } = data;
+        console.log(`Poker Action: ${action} from ${socket.id} in room ${roomId}`);
         const room = rooms.get(roomId);
-        if (!room || room.gameType !== 'poker' || !room.pokerEngine) return;
+        if (!room || room.gameType !== 'poker' || !room.pokerEngine) {
+            console.log(`Room ${roomId} not found or not poker! Rooms available:`, Array.from(rooms.keys()));
+            return;
+        }
 
         const engine = room.pokerEngine;
 
