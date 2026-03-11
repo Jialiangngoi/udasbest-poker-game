@@ -1,14 +1,15 @@
+import React from 'react';
 import type { Player } from '../logic/types';
 
 interface SidebarProps {
     players: Player[];
     currentPlayerIndex: number;
-    bank: Record<string, number>;
+    bank?: Record<string, number>;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ players, currentPlayerIndex, bank }) => {
     // Sort bank by balance for the leaderboard
-    const bankList = Object.entries(bank)
+    const bankList = Object.entries(bank || {})
         .sort(([, a], [, b]) => b - a)
         .slice(0, 10);
 
@@ -39,7 +40,7 @@ const Sidebar: React.FC<SidebarProps> = ({ players, currentPlayerIndex, bank }) 
                     <div style={{ color: '#555', textAlign: 'center', fontSize: 12 }}>No bank records yet.</div>
                 ) : (
                     bankList.map(([id, balance], idx) => {
-                        const seatedPlayer = players.find(p => p.ownerId === id);
+                        const seatedPlayer = (players || []).find(p => p.ownerId === id);
                         return (
                             <div key={id} style={{
                                 display: 'flex',
@@ -51,9 +52,9 @@ const Sidebar: React.FC<SidebarProps> = ({ players, currentPlayerIndex, bank }) 
                                 borderRadius: '4px'
                             }}>
                                 <span style={{ fontWeight: seatedPlayer ? 'bold' : 'normal' }}>
-                                    {idx + 1}. {seatedPlayer ? seatedPlayer.name : 'Unknown User'}
+                                    {idx + 1}. {seatedPlayer ? seatedPlayer.name || 'Unknown User' : 'Unknown User'}
                                 </span>
-                                <span>💩 {balance.toLocaleString()}</span>
+                                <span>💩 {(balance || 0).toLocaleString()}</span>
                             </div>
                         );
                     })
@@ -73,7 +74,7 @@ const Sidebar: React.FC<SidebarProps> = ({ players, currentPlayerIndex, bank }) 
             </h2>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {players.map((player, index) => (
+                {(players || []).map((player, index) => (
                     <div key={player.id} style={{
                         padding: '12px',
                         borderRadius: '8px',
@@ -119,7 +120,7 @@ const Sidebar: React.FC<SidebarProps> = ({ players, currentPlayerIndex, bank }) 
                         {player.isSeated ? (
                             <>
                                 <div style={{ fontSize: '12px', color: '#bdc3c7' }}>
-                                    💩 {player.chips.toLocaleString()}
+                                    💩 {(player.chips || 0).toLocaleString()}
                                 </div>
                                 {player.isFolded && (
                                     <div style={{ fontSize: '10px', color: '#e74c3c', fontWeight: 'bold' }}>FOLDED</div>

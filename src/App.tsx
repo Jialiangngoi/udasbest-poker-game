@@ -93,13 +93,14 @@ function App() {
     };
 
     const onPokerState = (state: any) => {
+      if (!state) return;
       setGameState(state);
       setIsRaising(false);
 
       // Update personal bank balance from the broadcasted global bank
       if (state.bank && state.bank[persistentDeviceId] !== undefined) {
         setBankBalance(state.bank[persistentDeviceId]);
-      } else {
+      } else if (state.players) {
         // Fallback: check if seated
         const seatedPlayer = state.players.find((p: Player) => p.ownerId === persistentDeviceId);
         if (seatedPlayer) {
@@ -176,7 +177,7 @@ function App() {
 
   const handleSitClick = (index: number) => {
     if (!isConnected) return;
-    if (gameState.players.some((p: Player) => p.ownerId === persistentDeviceId)) {
+    if (gameState.players && gameState.players.some((p: Player) => p.ownerId === persistentDeviceId)) {
       alert("You are already seated!");
       return;
     }
@@ -191,7 +192,8 @@ function App() {
   const handlePeek = () => setIsPeeking(!isPeeking);
 
   const handleRaiseClick = () => {
-    const maxBet = Math.max(...gameState.players.map((p: Player) => p.currentBet));
+    const players = gameState.players || [];
+    const maxBet = players.length > 0 ? Math.max(...players.map((p: Player) => p.currentBet)) : 0;
     const minRaise = gameState.lastRaise || 200000;
     setRaiseAmount(maxBet + minRaise);
     setIsRaising(!isRaising);
@@ -240,40 +242,41 @@ function App() {
     return <SnakeGame player1Name={playerName.trim()} socket={socket} roomId={roomId} onExit={() => setMode('lobby')} />;
   }
 
-  const hasSeatedPlayers = gameState.players.some((p: Player) => p.isSeated);
-  const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+  const players = gameState.players || [];
+  const hasSeatedPlayers = players.some((p: Player) => p.isSeated);
+  const currentPlayer = players[gameState.currentPlayerIndex];
   const isMyTurn = currentPlayer?.ownerId === persistentDeviceId;
-  const iHaveSeat = gameState.players.some((p: Player) => p.ownerId === persistentDeviceId);
+  const iHaveSeat = players.some((p: Player) => p.ownerId === persistentDeviceId);
 
   return (
     <div className="app-container">
       <div className="game-header">
         <h1>💩 POOP POKER 💩</h1>
         <div style={{ position: 'absolute', right: 200, top: 20, fontSize: 16, color: '#f1c40f', fontWeight: 'bold' }}>
-          🏦 BANK: 💩 {bankBalance.toLocaleString()}
+          🏦 BANK: 💩 {(bankBalance || 0).toLocaleString()}
         </div>
         <div style={{ position: 'absolute', right: 20, top: 20, fontSize: 16, color: isConnected ? '#2ecc71' : '#e74c3c' }}>{isConnected ? '🟢 ONLINE' : '🔴 OFFLINE'}</div>
         <div className="status-message">{gameState.message}</div>
       </div>
       <div className="game-main-area">
         <div className="table-container">
-          <Table players={gameState.players} communityCards={gameState.communityCards} pot={gameState.pot} currentPlayerIndex={gameState.currentPlayerIndex} isPeeking={isPeeking} phase={gameState.phase} turnStartTime={gameState.turnStartTime} timeLimitMs={gameState.timeLimitMs} onSitDown={handleSitClick} onRefresh={handleRefresh} onStandUp={handleStandUp} deviceId={persistentDeviceId} />
+          <Table players={players} communityCards={gameState.communityCards || []} pot={gameState.pot || 0} currentPlayerIndex={gameState.currentPlayerIndex} isPeeking={isPeeking} phase={gameState.phase} turnStartTime={gameState.turnStartTime} timeLimitMs={gameState.timeLimitMs} onSitDown={handleSitClick} onRefresh={handleRefresh} onStandUp={handleStandUp} deviceId={persistentDeviceId} />
         </div>
-        <Sidebar players={gameState.players} currentPlayerIndex={gameState.currentPlayerIndex} bank={gameState.bank} />
+        <Sidebar players={players} currentPlayerIndex={gameState.currentPlayerIndex} bank={gameState.bank} />
       </div>
       <div className="controls-container">
-        {!hasSeatedPlayers ? <div className="onboarding-tip">Click any seat to JOIN!</div> : !iHaveSeat ? <div className="onboarding-tip">Waiting for a seat...</div> : gameState.players.filter((p: Player) => p.isSeated).length < 2 ? <div className="onboarding-tip">Waiting for players...</div> : gameState.phase === 'Showdown' ? <button className="btn btn-primary btn-large" onClick={handleNewHand}>NEXT HAND 🔄</button> : (
+        {!hasSeatedPlayers ? <div className="onboarding-tip">Click any seat to JOIN!</div> : !iHaveSeat ? <div className="onboarding-tip">Waiting for a seat...</div> : players.filter((p: Player) => p.isSeated).length < 2 ? <div className="onboarding-tip">Waiting for players...</div> : gameState.phase === 'Showdown' ? <button className="btn btn-primary btn-large" onClick={handleNewHand}>NEXT HAND 🔄</button> : (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px', opacity: isMyTurn ? 1 : 0.5, pointerEvents: isMyTurn ? 'auto' : 'none', width: '100%' }}>
             <div className="action-buttons">
               <button className="btn btn-secondary" onClick={handlePeek}>{isPeeking ? '🙈 HIDE' : '👁️ PEEK'}</button>
               <button className="btn btn-danger" onClick={handleFold}>💨 FOLD</button>
-              <button className="btn btn-success" onClick={handleCall}>{Math.max(...gameState.players.map((p: Player) => p.currentBet)) - (currentPlayer?.currentBet || 0) === 0 ? '✅ CHECK' : '💰 CALL'}</button>
+              <button className="btn btn-success" onClick={handleCall}>{players.length > 0 ? (Math.max(...players.map((p: Player) => p.currentBet)) - (currentPlayer?.currentBet || 0) === 0 ? '✅ CHECK' : '💰 CALL') : '💰 CALL'}</button>
               <button className="btn btn-warning" onClick={handleRaiseClick}>🚀 {isRaising ? 'CANCEL' : 'RAISE'}</button>
             </div>
             {isRaising && (
               <div style={{ width: '100%', maxWidth: 400, backgroundColor: 'rgba(0,0,0,0.4)', padding: '20px', borderRadius: '15px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#f1c40f' }}><span>AMOUNT:</span><span>💩 {raiseAmount.toLocaleString()}</span></div>
-                <input type="range" min={Math.max(...gameState.players.map((p: Player) => p.currentBet)) + (gameState.lastRaise || 200000)} max={currentPlayer.chips + currentPlayer.currentBet} step={100000} value={raiseAmount} onChange={(e) => setRaiseAmount(parseInt(e.target.value))} style={{ width: '100%' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#f1c40f' }}><span>AMOUNT:</span><span>💩 {(raiseAmount || 0).toLocaleString()}</span></div>
+                <input type="range" min={(players.length > 0 ? Math.max(...players.map((p: Player) => p.currentBet)) : 0) + (gameState.lastRaise || 200000)} max={(currentPlayer?.chips || 0) + (currentPlayer?.currentBet || 0)} step={100000} value={raiseAmount} onChange={(e) => setRaiseAmount(parseInt(e.target.value))} style={{ width: '100%' }} />
                 <button className="btn btn-primary" onClick={confirmRaise} style={{ width: '100%' }}>CONFIRM 🚀</button>
               </div>
             )}
