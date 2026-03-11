@@ -14,7 +14,7 @@ export class GameEngine {
     message: string = 'Welcome to Poop Poker! Select a seat to join.';
     isPeeking: boolean = false;
     turnStartTime: number = 0;
-    timeLimitMs: number = 25000; // Increased to 25s for better UX
+    timeLimitMs: number = 25000;
     dealerIndex: number = -1;
     public bank: Map<string, number> = new Map();
     private deck: Deck;
@@ -33,6 +33,12 @@ export class GameEngine {
             title: TITLES[0],
             titleIndex: 0
         }));
+    }
+
+    private syncBank(player: Player) {
+        if (player.ownerId) {
+            this.bank.set(player.ownerId, player.chips);
+        }
     }
 
     sitDown(index: number, name: string, avatarUrl?: string, ownerId?: string) {
@@ -60,7 +66,6 @@ export class GameEngine {
 
         const seatedCount = this.players.filter(p => p.isSeated && p.chips > 0).length;
         if (seatedCount >= 2) {
-            // If the game hasn't started or is in Showdown, start a new hand
             if (this.phase === GamePhase.Showdown || (this.communityCards.length === 0 && this.players.every(p => p.hand.length === 0))) {
                 this.startNewHand();
             } else {
@@ -75,9 +80,7 @@ export class GameEngine {
         const player = this.players[index];
         if (!player.isSeated || player.ownerId !== ownerId) return;
 
-        if (player.ownerId) {
-            this.bank.set(player.ownerId, player.chips);
-        }
+        this.syncBank(player);
 
         player.isSeated = false;
         player.name = "";
@@ -102,7 +105,7 @@ export class GameEngine {
         if (!p.isSeated || p.chips > 0) return;
 
         p.chips = 10000000;
-        if (p.ownerId) this.bank.set(p.ownerId, p.chips);
+        this.syncBank(p);
         p.isFolded = false;
 
         const seated = this.players.filter(pt => pt.isSeated && pt.chips > 0);
@@ -133,7 +136,6 @@ export class GameEngine {
         this.lastRaise = this.minBet;
         this.isPeeking = false;
 
-        // Move Dealer Button
         const seatedIndices = this.players.map((p, i) => p.isSeated && p.chips > 0 ? i : -1).filter(i => i !== -1);
         if (this.dealerIndex === -1) {
             this.dealerIndex = seatedIndices[0];
@@ -162,7 +164,6 @@ export class GameEngine {
         const seatedIndices = this.players.map((p, i) => p.isSeated && p.chips > 0 ? i : -1).filter(i => i !== -1);
         if (seatedIndices.length < 2) return;
 
-        // In Heads-up (2 players), Dealer acts first pre-flop (is SB)
         const sbIdx = seatedIndices.length === 2
             ? this.dealerIndex
             : seatedIndices[(seatedIndices.indexOf(this.dealerIndex) + 1) % seatedIndices.length];
@@ -174,12 +175,14 @@ export class GameEngine {
 
         this.players[sbIdx].chips -= sbAmount;
         this.players[sbIdx].currentBet = sbAmount;
+        this.syncBank(this.players[sbIdx]);
+
         this.players[bbIdx].chips -= bbAmount;
         this.players[bbIdx].currentBet = bbAmount;
+        this.syncBank(this.players[bbIdx]);
 
         this.pot = sbAmount + bbAmount;
 
-        // Who acts first? The one after BB.
         let firstActorIdx = seatedIndices[(seatedIndices.indexOf(bbIdx) + 1) % seatedIndices.length];
         this.currentPlayerIndex = firstActorIdx;
         this.resetTimer();
@@ -195,6 +198,7 @@ export class GameEngine {
         p.chips -= callAmount;
         p.currentBet += callAmount;
         this.pot += callAmount;
+        this.syncBank(p);
         p.hasActed = true;
 
         this.nextTurn();
@@ -209,6 +213,7 @@ export class GameEngine {
         p.currentBet += raiseAmount;
         this.pot += raiseAmount;
         this.lastRaise = amount;
+        this.syncBank(p);
 
         for (const pl of this.players) {
             if (pl.isSeated && pl.id !== p.id && !pl.isFolded && pl.chips > 0) pl.hasActed = false;
@@ -301,7 +306,6 @@ export class GameEngine {
             return;
         }
 
-        // Post-flop, first active player after dealer acts
         let next = (this.dealerIndex + 1) % this.players.length;
         while (!this.players[next].isSeated || this.players[next].isFolded || this.players[next].chips === 0) {
             next = (next + 1) % this.players.length;
@@ -313,7 +317,7 @@ export class GameEngine {
 
     private showdown() {
         this.phase = GamePhase.Showdown;
-        this.turnStartTime = 0; // Stop auto-fold during showdown
+        this.turnStartTime = 0;
         const active = this.players.filter(p => !p.isFolded && p.isSeated);
         if (active.length === 0) return;
 
@@ -336,7 +340,7 @@ export class GameEngine {
             const share = Math.floor(this.pot / winners.length);
             for (const w of winners) {
                 w.player.chips += share;
-                if (w.player.ownerId) this.bank.set(w.player.ownerId, w.player.chips);
+                this.syncBank(w.player);
             }
             this.pot = 0;
         }
@@ -352,10 +356,10 @@ export class GameEngine {
 
     private endHand(winner: Player) {
         winner.chips += this.pot;
-        if (winner.ownerId) this.bank.set(winner.ownerId, winner.chips);
+        this.syncBank(winner);
         this.pot = 0;
         this.phase = GamePhase.Showdown;
-        this.turnStartTime = 0; // Stop auto-fold
+        this.turnStartTime = 0;
     }
 
     exportBank(): Record<string, number> {
