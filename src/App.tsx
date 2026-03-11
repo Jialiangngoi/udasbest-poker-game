@@ -33,9 +33,10 @@ function App() {
   const [persistentDeviceId] = useState<string>(() => {
     let id = localStorage.getItem('poop_poker_device_id');
     if (!id) {
-      id = crypto.randomUUID();
+      id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36);
       localStorage.setItem('poop_poker_device_id', id);
     }
+    console.log("Local Device ID:", id);
     return id;
   });
   const [isConnected, setIsConnected] = useState<boolean>(false);

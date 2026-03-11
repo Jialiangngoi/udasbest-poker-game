@@ -114,9 +114,11 @@ io.on('connection', (socket) => {
 
         switch (action) {
             case 'sit_down':
+                console.log(`Sitting down at index ${payload.index} for ${payload.name} (ID: ${payload.ownerId})`);
                 engine.sitDown(payload.index, payload.name, payload.avatarUrl, payload.ownerId || socket.id);
                 break;
             case 'stand_up':
+                console.log(`Standing up from index ${payload.index} (ID: ${payload.ownerId})`);
                 engine.standUp(payload.index, payload.ownerId || socket.id);
                 break;
             case 'refresh_player':
