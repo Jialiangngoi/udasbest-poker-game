@@ -15,6 +15,7 @@ export class GameEngine {
     isPeeking: boolean = false;
     turnStartTime: number = 0;
     timeLimitMs: number = 15000;
+    private bank: Map<string, number> = new Map();
     private deck: Deck;
 
     constructor() {
@@ -44,7 +45,16 @@ export class GameEngine {
 
         this.players[index].isSeated = true;
         this.players[index].name = name;
-        this.players[index].chips = 10000000; // 10M
+
+        // Recover from bank or give initial chips
+        if (ownerId && this.bank.has(ownerId)) {
+            this.players[index].chips = this.bank.get(ownerId)!;
+            this.message = `Welcome back, ${name}! Your chips have been restored.`;
+        } else {
+            this.players[index].chips = 10000000; // 10M
+            if (ownerId) this.bank.set(ownerId, 10000000);
+        }
+
         this.players[index].title = TITLES[0];
         this.players[index].titleIndex = 0;
         this.players[index].avatarUrl = avatarUrl;
@@ -66,6 +76,11 @@ export class GameEngine {
     standUp(index: number, ownerId: string) {
         const player = this.players[index];
         if (!player.isSeated || player.ownerId !== ownerId) return;
+
+        // Save chips to bank before clearing
+        if (player.ownerId) {
+            this.bank.set(player.ownerId, player.chips);
+        }
 
         // Clear player data
         player.isSeated = false;
@@ -90,6 +105,7 @@ export class GameEngine {
         p.titleIndex = Math.min(p.titleIndex + 1, TITLES.length - 1);
         p.title = TITLES[p.titleIndex];
         p.chips = 10000000;
+        if (p.ownerId) this.bank.set(p.ownerId, p.chips);
         p.isFolded = false;
 
         const seated = this.players.filter(pt => pt.isSeated && pt.chips > 0);
@@ -330,7 +346,11 @@ export class GameEngine {
             const names = winners.map(w => w.player.name).join(', ');
             this.message = `Tie between: ${names}`;
             const share = Math.floor(this.pot / winners.length);
-            for (const w of winners) w.player.chips += share;
+            for (const w of winners) {
+                w.player.chips += share;
+                // Update bank for winner
+                if (w.player.ownerId) this.bank.set(w.player.ownerId, w.player.chips);
+            }
             this.pot = 0;
         }
     }
@@ -345,6 +365,8 @@ export class GameEngine {
 
     private endHand(winner: Player) {
         winner.chips += this.pot;
+        // Update bank for winner
+        if (winner.ownerId) this.bank.set(winner.ownerId, winner.chips);
         this.pot = 0;
         this.phase = GamePhase.Showdown;
     }
@@ -382,5 +404,9 @@ export class GameEngine {
     getHandRankLabel(rank: number): string {
         const labels = ['High Card', 'Pair', 'Two Pair', 'Three of a Kind', 'Straight', 'Flush', 'Full House', 'Four of a Kind', 'Straight Flush', 'Royal Flush'];
         return labels[rank] || 'Unknown';
+    }
+
+    getBankBalance(ownerId: string): number {
+        return this.bank.get(ownerId) || 0;
     }
 }

@@ -1,6 +1,6 @@
 import express from 'express';
 import http from 'http';
-import { Server, Socket } from 'socket.io';
+import { Server } from 'socket.io';
 import cors from 'cors';
 import { GameEngine } from './logic/gameEngine.js';
 import { SnakeEngine } from './logic/snakeEngine.js';
@@ -114,10 +114,10 @@ io.on('connection', (socket) => {
 
         switch (action) {
             case 'sit_down':
-                engine.sitDown(payload.index, payload.name, payload.avatarUrl, socket.id);
+                engine.sitDown(payload.index, payload.name, payload.avatarUrl, payload.ownerId || socket.id);
                 break;
             case 'stand_up':
-                engine.standUp(payload.index, socket.id);
+                engine.standUp(payload.index, payload.ownerId || socket.id);
                 break;
             case 'refresh_player':
                 engine.refreshPlayer(payload.index);
@@ -167,10 +167,7 @@ io.on('connection', (socket) => {
                 room.players.delete(socket.id);
 
                 if (room.gameType === 'poker' && room.pokerEngine) {
-                    const seatIndex = room.pokerEngine.players.findIndex(p => p.ownerId === socket.id);
-                    if (seatIndex !== -1) {
-                        room.pokerEngine.standUp(seatIndex, socket.id);
-                    }
+                    // Stay seated for reconnecting
                 } else if (room.gameType === 'snake' && room.snakeEngine) {
                     const s = room.snakeEngine.snakes.find(s => s.id === socket.id);
                     if (s) s.isDead = true;

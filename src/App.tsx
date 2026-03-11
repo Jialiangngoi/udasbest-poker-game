@@ -30,15 +30,22 @@ function App() {
   });
   const [selectedGame, setSelectedGame] = useState<'poker' | 'snake'>('poker');
   const [roomId, setRoomId] = useState<string>('');
-  const [socketId, setSocketId] = useState<string>('');
+  const [persistentDeviceId] = useState<string>(() => {
+    let id = localStorage.getItem('poop_poker_device_id');
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem('poop_poker_device_id', id);
+    }
+    return id;
+  });
   const [isConnected, setIsConnected] = useState<boolean>(false);
-  // Unused state removed to fix lint error
   const [isRaising, setIsRaising] = useState(false);
   const [raiseAmount, setRaiseAmount] = useState(0);
 
   // Player Profile
   const [playerName, setPlayerName] = useState(() => localStorage.getItem('poop_poker_name') || '');
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(() => localStorage.getItem('poop_poker_avatar') || undefined);
+  const [bankBalance, setBankBalance] = useState<number>(0);
 
   // Game State received from Server
   const [gameState, setGameState] = useState<{
@@ -73,7 +80,6 @@ function App() {
 
     const onConnect = () => {
       setIsConnected(true);
-      setSocketId(socket.id || '');
     };
 
     const onDisconnect = () => {
@@ -87,6 +93,12 @@ function App() {
     const onPokerState = (state: any) => {
       setGameState(state);
       setIsRaising(false);
+
+      // Update bank balance from current player if seated
+      const seatedPlayer = state.players.find((p: Player) => p.ownerId === persistentDeviceId);
+      if (seatedPlayer) {
+        setBankBalance(seatedPlayer.chips);
+      }
     };
 
     socket.on('connect', onConnect);
@@ -102,7 +114,7 @@ function App() {
       socket.off('connect_error', onConnectError);
       socket.off('poker_state', onPokerState);
     };
-  }, []);
+  }, [persistentDeviceId]);
 
   const isFormValid = playerName.trim().length > 0;
 
@@ -160,16 +172,15 @@ function App() {
   const sendPokerAction = (action: string, payload?: any) => socket.emit('poker_action', { roomId, action, payload });
 
   const handleSitClick = (index: number) => {
-    const currentId = socketId || socket.id;
-    if (!isConnected || !currentId) return;
-    if (gameState.players.some((p: Player) => p.ownerId === currentId)) {
+    if (!isConnected) return;
+    if (gameState.players.some((p: Player) => p.ownerId === persistentDeviceId)) {
       alert("You are already seated!");
       return;
     }
-    sendPokerAction('sit_down', { index, name: playerName.trim(), avatarUrl });
+    sendPokerAction('sit_down', { index, name: playerName.trim(), avatarUrl, ownerId: persistentDeviceId });
   };
 
-  const handleStandUp = (index: number) => sendPokerAction('stand_up', { index });
+  const handleStandUp = (index: number) => sendPokerAction('stand_up', { index, ownerId: persistentDeviceId });
   const handleRefresh = (index: number) => sendPokerAction('refresh_player', { index });
   const handleNewHand = () => sendPokerAction('start_hand');
   const handleCall = () => sendPokerAction('call');
@@ -228,19 +239,22 @@ function App() {
 
   const hasSeatedPlayers = gameState.players.some((p: Player) => p.isSeated);
   const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-  const isMyTurn = currentPlayer?.ownerId === socketId || currentPlayer?.ownerId === socket.id;
-  const iHaveSeat = gameState.players.some((p: Player) => p.ownerId === socketId || p.ownerId === socket.id);
+  const isMyTurn = currentPlayer?.ownerId === persistentDeviceId;
+  const iHaveSeat = gameState.players.some((p: Player) => p.ownerId === persistentDeviceId);
 
   return (
     <div className="app-container">
       <div className="game-header">
         <h1>💩 POOP POKER 💩</h1>
+        <div style={{ position: 'absolute', right: 200, top: 20, fontSize: 16, color: '#f1c40f', fontWeight: 'bold' }}>
+          🏦 BANK: 💩 {bankBalance.toLocaleString()}
+        </div>
         <div style={{ position: 'absolute', right: 20, top: 20, fontSize: 16, color: isConnected ? '#2ecc71' : '#e74c3c' }}>{isConnected ? '🟢 ONLINE' : '🔴 OFFLINE'}</div>
         <div className="status-message">{gameState.message}</div>
       </div>
       <div className="game-main-area">
         <div className="table-container">
-          <Table players={gameState.players} communityCards={gameState.communityCards} pot={gameState.pot} currentPlayerIndex={gameState.currentPlayerIndex} isPeeking={isPeeking} phase={gameState.phase} turnStartTime={gameState.turnStartTime} timeLimitMs={gameState.timeLimitMs} onSitDown={handleSitClick} onRefresh={handleRefresh} onStandUp={handleStandUp} deviceId={socketId || socket.id || ''} />
+          <Table players={gameState.players} communityCards={gameState.communityCards} pot={gameState.pot} currentPlayerIndex={gameState.currentPlayerIndex} isPeeking={isPeeking} phase={gameState.phase} turnStartTime={gameState.turnStartTime} timeLimitMs={gameState.timeLimitMs} onSitDown={handleSitClick} onRefresh={handleRefresh} onStandUp={handleStandUp} deviceId={persistentDeviceId} />
         </div>
         <Sidebar players={gameState.players} currentPlayerIndex={gameState.currentPlayerIndex} />
       </div>
