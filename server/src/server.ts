@@ -1,3 +1,21 @@
+import express from 'express';
+import http from 'http';
+import { Server, Socket } from 'socket.io';
+import cors from 'cors';
+import { GameEngine } from './logic/gameEngine.js';
+import { SnakeEngine } from './logic/snakeEngine.js';
+
+const app = express();
+app.use(cors());
+
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: '*',
+        methods: ['GET', 'POST']
+    },
+    maxHttpBufferSize: 5e7 // 50MB limit to handle larger animated GIFs
+});
 
 const PORT = process.env.PORT || 3001;
 
@@ -117,9 +135,6 @@ io.on('connection', (socket) => {
                 engine.fold();
                 break;
             case 'peek':
-                // Peeking shouldn't be broadcasted, it's local UI state usually, 
-                // but if they want to peek, we can send a private event if needed.
-                // For now, let's ignore peek on server and keep it local.
                 break;
         }
 
@@ -141,9 +156,6 @@ io.on('connection', (socket) => {
             engine.reset();
             engine.addPlayer(socket.id, payload.name || 'Host');
         }
-
-        // Snake engine ticks are handled via a server loop, but we can broadcast immediate state
-        // For snake, we should probably run the loop ON THE SERVER and broadcast it.
     });
 
     socket.on('disconnect', () => {
@@ -155,13 +167,11 @@ io.on('connection', (socket) => {
                 room.players.delete(socket.id);
 
                 if (room.gameType === 'poker' && room.pokerEngine) {
-                    // Could auto-stand them up or mark disconnected
                     const seatIndex = room.pokerEngine.players.findIndex(p => p.ownerId === socket.id);
                     if (seatIndex !== -1) {
                         room.pokerEngine.standUp(seatIndex, socket.id);
                     }
                 } else if (room.gameType === 'snake' && room.snakeEngine) {
-                    // Mark snake dead or remove
                     const s = room.snakeEngine.snakes.find(s => s.id === socket.id);
                     if (s) s.isDead = true;
                 }

@@ -1,3 +1,10 @@
+import React, { useState, useEffect } from 'react';
+import { io, Socket } from 'socket.io-client';
+import Table from './components/Table';
+import Sidebar from './components/Sidebar';
+import SnakeGame from './components/SnakeGame';
+import type { Player, CardModel, GamePhaseValue } from './logic/types';
+import './App.css';
 
 // Connect to the backend
 const socketUrl = import.meta.env.VITE_SERVER_URL ||
@@ -110,39 +117,41 @@ function App() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Check file size for GIFs (limit to 2MB to prevent connection drops)
-      if (file.type === 'image/gif' && file.size > 2 * 1024 * 1024) {
-        alert("GIF is too large! Please choose a GIF under 2MB.");
-        return;
-      }
+      const isGif = file.type === 'image/gif';
+      const MAX_GIF_SIZE = 10 * 1024 * 1024; // 10MB limit for animations
 
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
 
-        // If it's a GIF, don't use canvas (which would make it static)
-        if (file.type === 'image/gif') {
+        // If it's a GIF under 10MB, allow it to remain animated
+        if (isGif && file.size <= MAX_GIF_SIZE) {
           setAvatarUrl(result);
           return;
         }
 
+        // If it's a huge GIF or a static image, compress it
         const img = new Image();
         img.onload = () => {
-          // Downscale static images for networking efficiency
+          if (isGif && file.size > MAX_GIF_SIZE) {
+            const confirmStatic = window.confirm(`This GIF is quite large (${(file.size / 1024 / 1024).toFixed(1)}MB). To keep the game fast, would you like to use a static version (compressed) of this image instead?`);
+            if (!confirmStatic) return;
+          }
+
           const canvas = document.createElement('canvas');
-          const MAX_SIZE = 200;
+          const MAX_DIM = 200;
           let width = img.width;
           let height = img.height;
 
           if (width > height) {
-            if (width > MAX_SIZE) {
-              height *= MAX_SIZE / width;
-              width = MAX_SIZE;
+            if (width > MAX_DIM) {
+              height *= MAX_DIM / width;
+              width = MAX_DIM;
             }
           } else {
-            if (height > MAX_SIZE) {
-              width *= MAX_SIZE / height;
-              height = MAX_SIZE;
+            if (height > MAX_DIM) {
+              width *= MAX_DIM / height;
+              height = MAX_DIM;
             }
           }
 
