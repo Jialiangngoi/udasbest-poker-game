@@ -33,6 +33,35 @@ const Table: React.FC<TableProps> = ({
     turnStartTime,
     timeLimitMs
 }) => {
+    const containerRef = React.useRef<HTMLDivElement>(null);
+    const [scale, setScale] = React.useState(1);
+
+    React.useEffect(() => {
+        const updateScale = () => {
+            if (containerRef.current) {
+                const { width, height } = containerRef.current.getBoundingClientRect();
+                // Base dimensions for the table design
+                const baseWidth = 1000;
+                const baseHeight = 700;
+                const scaleW = width / baseWidth;
+                const scaleH = height / baseHeight;
+                // Leave some margin
+                const newScale = Math.min(scaleW, scaleH) * 0.95;
+                setScale(Math.max(0.3, Math.min(1.2, newScale)));
+            }
+        };
+
+        const observer = new ResizeObserver(updateScale);
+        if (containerRef.current) observer.observe(containerRef.current);
+        window.addEventListener('resize', updateScale);
+        updateScale();
+
+        return () => {
+            observer.disconnect();
+            window.removeEventListener('resize', updateScale);
+        };
+    }, []);
+
     // Using polar coordinates for a better oval feel
     const getPlayerStyle = (index: number) => {
         const angle = (index * (360 / 9) + 90) * (Math.PI / 180);
@@ -49,71 +78,76 @@ const Table: React.FC<TableProps> = ({
     };
 
     return (
-        <div style={{
-            width: '100%',
-            height: '100%',
-            position: 'relative',
-            background: 'radial-gradient(circle, #1e4d2b 0%, #112e1a 100%)',
-            borderRadius: '200px',
-            border: '15px solid #2c1810',
-            boxShadow: 'inset 0 0 80px rgba(0,0,0,0.8), 0 20px 50px rgba(0,0,0,0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-        }}>
-            {/* Table Inner Felt Border */}
+        <div ref={containerRef} style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
             <div style={{
-                position: 'absolute',
-                inset: 20,
-                border: '2px solid rgba(255,255,255,0.1)',
-                borderRadius: '180px',
-                pointerEvents: 'none'
-            }} />
-
-            {/* Community Cards & Pot */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 30, zIndex: 1 }}>
+                width: '1000px',
+                height: '700px',
+                position: 'relative',
+                background: 'radial-gradient(circle, #1e4d2b 0%, #112e1a 100%)',
+                borderRadius: '200px',
+                border: '15px solid #2c1810',
+                boxShadow: 'inset 0 0 80px rgba(0,0,0,0.8), 0 20px 50px rgba(0,0,0,0.6)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transform: `scale(${scale})`,
+                transition: 'transform 0.2s ease-out',
+                flexShrink: 0
+            }}>
+                {/* Table Inner Felt Border */}
                 <div style={{
-                    color: '#f1c40f',
-                    fontSize: 32,
-                    fontWeight: 'bold',
-                    textShadow: '0 4px 8px rgba(0,0,0,0.5)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10
-                }}>
-                    <span>💩 POT:</span>
-                    <span>{pot.toLocaleString()}</span>
+                    position: 'absolute',
+                    inset: 20,
+                    border: '2px solid rgba(255,255,255,0.1)',
+                    borderRadius: '180px',
+                    pointerEvents: 'none'
+                }} />
+
+                {/* Community Cards & Pot */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 30, zIndex: 1 }}>
+                    <div style={{
+                        color: '#f1c40f',
+                        fontSize: 32,
+                        fontWeight: 'bold',
+                        textShadow: '0 4px 8px rgba(0,0,0,0.5)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10
+                    }}>
+                        <span>💩 POT:</span>
+                        <span>{pot.toLocaleString()}</span>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 12 }}>
+                        {Array.from({ length: 5 }).map((_, i) => (
+                            <Card
+                                key={i}
+                                card={communityCards[i]}
+                                isFaceUp={!!communityCards[i]}
+                                width={85}
+                            />
+                        ))}
+                    </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: 12 }}>
-                    {Array.from({ length: 5 }).map((_, i) => (
-                        <Card
-                            key={i}
-                            card={communityCards[i]}
-                            isFaceUp={!!communityCards[i]}
-                            width={85}
+                {/* Player Seats */}
+                {players.map((player, index) => (
+                    <div key={player.id} style={getPlayerStyle(index)}>
+                        <PlayerSeat
+                            player={player}
+                            isCurrent={currentPlayerIndex === index && player.isSeated && phase !== GamePhase.Showdown}
+                            isPeeking={isPeeking}
+                            showCards={phase === GamePhase.Showdown}
+                            onSitDown={() => onSitDown(index)}
+                            onRefresh={() => onRefresh(index)}
+                            onStandUp={() => onStandUp(index)}
+                            deviceId={deviceId}
+                            turnStartTime={turnStartTime}
+                            timeLimitMs={timeLimitMs}
                         />
-                    ))}
-                </div>
+                    </div>
+                ))}
             </div>
-
-            {/* Player Seats */}
-            {players.map((player, index) => (
-                <div key={player.id} style={getPlayerStyle(index)}>
-                    <PlayerSeat
-                        player={player}
-                        isCurrent={currentPlayerIndex === index && player.isSeated && phase !== GamePhase.Showdown}
-                        isPeeking={isPeeking}
-                        showCards={phase === GamePhase.Showdown}
-                        onSitDown={() => onSitDown(index)}
-                        onRefresh={() => onRefresh(index)}
-                        onStandUp={() => onStandUp(index)}
-                        deviceId={deviceId}
-                        turnStartTime={turnStartTime}
-                        timeLimitMs={timeLimitMs}
-                    />
-                </div>
-            ))}
         </div>
     );
 };

@@ -8,9 +8,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ players, currentPlayerIndex }) => {
     return (
-        <div style={{
-            width: '280px',
-            height: '100%',
+        <div className="sidebar-container" style={{
             backgroundColor: '#1a1a1a',
             borderLeft: '2px solid #2c1810',
             display: 'flex',
@@ -93,7 +91,7 @@ const Sidebar: React.FC<SidebarProps> = ({ players, currentPlayerIndex }) => {
                 <p style={{ fontSize: '10px', color: '#555', marginBottom: '8px', letterSpacing: '1px' }}>SECURE PAYMENTS BY</p>
                 <img
                     src="/src/assets/partners.png"
-                    alt="Visa & TNG"
+                    alt="Logo"
                     style={{ width: '100%', maxWidth: '180px', opacity: 0.6, filter: 'grayscale(100%) brightness(1.5)' }}
                 />
             </div>

@@ -211,6 +211,12 @@ export class GameEngine {
 
     private nextTurn() {
         this.isPeeking = false;
+
+        if (this.isHandLocked()) {
+            this.nextPhase();
+            return;
+        }
+
         const maxBet = Math.max(...this.players.map(p => p.currentBet));
         const roundOver = this.players.every(p =>
             !p.isSeated || p.isFolded || (p.hasActed && p.currentBet === maxBet) || (p.chips === 0 && p.hasActed)
@@ -220,13 +226,25 @@ export class GameEngine {
             this.nextPhase();
         } else {
             let next = (this.currentPlayerIndex + 1) % this.players.length;
-            while (!this.players[next].isSeated || this.players[next].isFolded) {
+            while (!this.players[next].isSeated || this.players[next].isFolded || (this.players[next].chips === 0 && this.players[next].hasActed)) {
                 next = (next + 1) % this.players.length;
             }
             this.currentPlayerIndex = next;
             this.resetTimer();
             this.message = `Pass device to ${this.players[this.currentPlayerIndex].name}`;
         }
+    }
+
+    private isHandLocked(): boolean {
+        const activeInHand = this.players.filter(p => p.isSeated && !p.isFolded);
+        const canStillBet = activeInHand.filter(p => p.chips > 0);
+
+        // If 0 or 1 player can still bet, and everyone is matched up or all-in, it's locked
+        if (canStillBet.length <= 1) {
+            const maxBet = Math.max(...this.players.map(p => p.currentBet));
+            return activeInHand.every(p => p.currentBet === maxBet || p.chips === 0);
+        }
+        return false;
     }
 
     private nextPhase() {
@@ -256,9 +274,30 @@ export class GameEngine {
                 return;
         }
 
+        // If locked, automatically trigger next phase
+        if (this.isHandLocked()) {
+            this.message = `All-in! Fast-forwarding to showdown...`;
+            this.nextPhase();
+            return;
+        }
+
         let next = 0;
-        while (!this.players[next].isSeated || this.players[next].isFolded) {
+        // Find first player to act who isn't all-in
+        const activePlayers = this.players.filter(p => p.isSeated && !p.isFolded);
+        const bettors = activePlayers.filter(p => p.chips > 0);
+
+        if (bettors.length === 0 && activePlayers.length >= 2) {
+            // Everyone is all-in, just go to showdown
+            this.showdown();
+            return;
+        }
+
+        while (!this.players[next].isSeated || this.players[next].isFolded || (this.players[next].chips === 0 && activePlayers.length > 0)) {
             next = (next + 1) % this.players.length;
+            // Safety break
+            if (next === 0 && (!this.players[0].isSeated || this.players[0].isFolded || this.players[0].chips === 0)) {
+                break;
+            }
         }
         this.currentPlayerIndex = next;
         this.resetTimer();
@@ -334,7 +373,6 @@ export class GameEngine {
             }
         });
 
-        // If there are seated players but game hasn't started, try to start it
         const seated = this.players.filter(p => p.isSeated);
         if (seated.length >= 2 && this.phase === GamePhase.PreFlop && this.players.every(p => p.hand.length === 0)) {
             this.startNewHand();
