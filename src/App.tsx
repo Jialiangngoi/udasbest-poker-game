@@ -33,6 +33,8 @@ function App() {
   const [socketId, setSocketId] = useState<string>('');
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [isRaising, setIsRaising] = useState(false);
+  const [raiseAmount, setRaiseAmount] = useState(0);
 
   // Player Profile
   const [playerName, setPlayerName] = useState(() => localStorage.getItem('poop_poker_name') || '');
@@ -89,6 +91,7 @@ function App() {
 
     const onPokerState = (state: any) => {
       setGameState(state);
+      setIsRaising(false); // Reset raise state when it's a new state (e.g. turn changed)
     };
 
     socket.on('connect', onConnect);
@@ -115,7 +118,37 @@ function App() {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => setAvatarUrl(reader.result as string);
+      reader.onloadend = () => {
+        const img = new Image();
+        img.onload = () => {
+          // Downscale to 200x200 for networking efficiency
+          const canvas = document.createElement('canvas');
+          const MAX_SIZE = 200;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_SIZE) {
+              height *= MAX_SIZE / width;
+              width = MAX_SIZE;
+            }
+          } else {
+            if (height > MAX_SIZE) {
+              width *= MAX_SIZE / height;
+              height = MAX_SIZE;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          setAvatarUrl(dataUrl);
+        };
+        img.src = reader.result as string;
+      };
       reader.readAsDataURL(file);
     }
   };
@@ -175,10 +208,16 @@ function App() {
   const handleFold = () => sendPokerAction('fold');
   const handlePeek = () => setIsPeeking(!isPeeking);
 
-  const handleRaise = () => {
+  const handleRaiseClick = () => {
     const maxBet = Math.max(...gameState.players.map(p => p.currentBet));
-    const amount = maxBet + 200000; // Hardcoded min bet for now
-    sendPokerAction('raise', { amount });
+    const minRaise = gameState.lastRaise || 200000;
+    setRaiseAmount(maxBet + minRaise);
+    setIsRaising(!isRaising);
+  };
+
+  const confirmRaise = () => {
+    sendPokerAction('raise', { amount: raiseAmount });
+    setIsRaising(false);
   };
 
   if (mode === 'lobby') {
@@ -286,8 +325,8 @@ function App() {
 
   const hasSeatedPlayers = gameState.players.some(p => p.isSeated);
   const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-  const isMyTurn = currentPlayer?.ownerId === socket.id;
-  const iHaveSeat = gameState.players.some(p => p.ownerId === socket.id);
+  const isMyTurn = currentPlayer?.ownerId === socketId || currentPlayer?.ownerId === socket.id;
+  const iHaveSeat = gameState.players.some(p => p.ownerId === socketId || p.ownerId === socket.id);
 
   return (
     <div className="app-container">
@@ -340,8 +379,40 @@ function App() {
               <button className="btn btn-success" onClick={handleCall}>
                 {Math.max(...gameState.players.map(p => p.currentBet)) - (currentPlayer?.currentBet || 0) === 0 ? '✅ CHECK' : '💰 CALL'}
               </button>
-              <button className="btn btn-warning" onClick={handleRaise}>🚀 RAISE</button>
+              <button className="btn btn-warning" onClick={handleRaiseClick}>🚀 {isRaising ? 'CANCEL' : 'RAISE'}</button>
             </div>
+
+            {isRaising && (
+              <div style={{
+                width: '100%',
+                maxWidth: 400,
+                backgroundColor: 'rgba(0,0,0,0.4)',
+                padding: '20px',
+                borderRadius: '15px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '15px',
+                animation: 'fadeIn 0.2s ease'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#f1c40f', fontWeight: 'bold' }}>
+                  <span>RAISE AMOUNT:</span>
+                  <span>💩 {raiseAmount.toLocaleString()}</span>
+                </div>
+                <input
+                  type="range"
+                  min={Math.max(...gameState.players.map(p => p.currentBet)) + (gameState.lastRaise || 200000)}
+                  max={currentPlayer.chips + currentPlayer.currentBet}
+                  step={100000}
+                  value={raiseAmount}
+                  onChange={(e) => setRaiseAmount(parseInt(e.target.value))}
+                  style={{ width: '100%', cursor: 'pointer' }}
+                />
+                <button className="btn btn-primary" onClick={confirmRaise} style={{ width: '100%' }}>
+                  CONFIRM RAISE 🚀
+                </button>
+              </div>
+            )}
+
             {!isMyTurn && <div style={{ fontSize: 12, color: '#f1c40f' }}>Waiting for {currentPlayer?.name}'s turn...</div>}
           </div>
         )}
