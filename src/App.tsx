@@ -7,6 +7,7 @@ import type { Player, CardModel, GamePhaseValue } from './logic/types';
 import './App.css';
 
 // Connect to the backend
+// Prioritize local server: hostname:3001, otherwise fallback to Render for cloud demo
 const socketUrl = import.meta.env.VITE_SERVER_URL ||
   (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && !window.location.hostname.includes('vercel.app')
     ? `http://${window.location.hostname}:3001`
